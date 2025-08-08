@@ -6,7 +6,9 @@ import toast from 'react-hot-toast';
 const API = import.meta.env.VITE_API_URL;
 
 export const Calendar = () => {
-    const [events, setEvents] = useState([]);
+    const [events,setEvents] = useState([]);
+    const [upcomingEvents, setUpcomingEvents] = useState([]);
+    const [pastEvents, setPastEvents] = useState([]);
     const [currentDate, setCurrentDate] = useState(new Date());
     const [newEvent, setNewEvent] = useState({
         name: '',
@@ -14,19 +16,25 @@ export const Calendar = () => {
         type: 'Meeting',
         description: ''
     });
+    const [showHistory, setShowHistory] = useState(false);
+    const [searchQuery, setSearchQuery] = useState("");
+    const [filterType, setFilterType] = useState("All");
 
     useEffect(() => {
-        const fetchEvents = async () => {
-            try {
-                const eventList = await axios.get(`${API}/events/`);
-                const fetchedEvents = eventList.data;
-                setEvents(fetchedEvents);
-                console.log(fetchedEvents);
-            } catch (error) {
-                console.log(error);
-            }
-        }
-        fetchEvents();
+        axios.get(`${API}/events`)
+            .then(res => {
+                const now = new Date();
+
+                const past = res.data.filter(event => new Date(event.date) < now);
+                const upcoming = res.data.filter(event => new Date(event.date) >= now);
+
+                console.log(past);
+                
+                setPastEvents(past);
+                setUpcomingEvents(upcoming);
+                setEvents(res.data);
+            })
+            .catch(err => console.error(err));
     }, [])
 
     const days = Array.from({ length: 35 }, (_, i) => {
@@ -38,7 +46,6 @@ export const Calendar = () => {
             events: events.filter(e => new Date(e.date).toDateString() === date.toDateString()),
         };
     });
-
 
     // Handles add event
     const handleAddEvent = async (e) => {
@@ -53,23 +60,19 @@ export const Calendar = () => {
 
         try {
             const response = await axios.post(`${API}/events`, newEventObj);
-
-            setEvents(prev => [...prev, response.data]);
-
-            setNewEvent({
-                name: '',
-                date: '',
-                type: 'Meeting',
-                description: ''
-            });
-
+            // setEvents(prev => [...prev, response.data]);
             toast.success('Event added successfully!');
         } catch (error) {
             console.error('Failed to add event:', error);
             toast.error('Failed to add event.');
         }
-        setEvents(prev => [...prev, newEventObj]);
-        setNewEvent({ name: '', date: '', type: 'Meeting', description: '' });
+
+        setNewEvent({
+            name: '',
+            date: '',
+            type: 'Meeting',
+            description: ''
+        });
     };
 
     const nextMonth = () => {
@@ -85,6 +88,21 @@ export const Calendar = () => {
         setCurrentDate(new Date(today.getFullYear(), today.getMonth(), 1));
     };
 
+    // Handles filtering past events
+    const handleViewHistory = () => {
+        const today = new Date();
+        const history = pastEvents.filter(e => new Date(e.date) < today);
+        setPastEvents(history);
+        setShowHistory(true);
+    };
+
+    // Filtered past events
+    const filteredPastEvents = pastEvents.filter(event => {
+        const matchesSearch = event.name.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesType = filterType === "All" || event.type === filterType.toLowerCase().replace(" ", "-");
+        return matchesSearch && matchesType;
+    });
+
     return (
         <div className="space-y-6">
             <div>
@@ -93,6 +111,7 @@ export const Calendar = () => {
                     View and manage all daycare events, activities, and important dates.
                 </p>
             </div>
+            {/* Calendar Header */}
             <div className="flex items-center">
                 <div className="flex-1">
                     <h2 className="font-semibold text-gray-900">{currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</h2>
@@ -121,6 +140,7 @@ export const Calendar = () => {
                     </button>
                 </div>
             </div>
+            {/* Calender Grid */}
             <div className="bg-white shadow overflow-hidden rounded-lg">
                 <div className="grid grid-cols-7 gap-px border-b border-gray-200 bg-gray-200">
                     <div className="bg-white py-2">
@@ -188,25 +208,37 @@ export const Calendar = () => {
                     ))}
                 </div>
             </div>
+            {/* Event Section */}
             <div className="bg-white shadow overflow-hidden rounded-lg">
-                <div className="px-4 py-5 sm:px-6">
+                <div className="flex items-center justify-between px-4 py-5 sm:px-6">
                     <h3 className="text-lg leading-6 font-medium text-gray-900">
                         Upcoming Events
                     </h3>
+                    <button
+                        onClick={handleViewHistory}
+                        className="px-2 py-1 bg-purple-600 text-white rounded-md hover:bg-purple-700"
+                    >
+                        View Event History
+                    </button>
                 </div>
                 <div className="border-t border-gray-200">
                     <ul className="divide-y divide-gray-200">
-                        {events.map((event) => (
+                        {upcomingEvents.map((event) => (
                             <li key={event._id} className="px-4 py-4 sm:px-6 hover:bg-gray-50">
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center">
                                         <div
-                                            className={`h-2 w-2 rounded-full mr-3
+                                            className={`h-2 w-2 flex flex-col rounded-full mr-3
                       ${event.type === 'meeting' ? 'bg-blue-500' : event.type === 'field-trip' ? 'bg-green-500' : event.type === 'staff' ? 'bg-yellow-500' : 'bg-purple-500'}`}
                                         />
-                                        <p className="text-sm font-medium text-gray-900">
-                                            {event.name}
-                                        </p>
+                                        <div>
+                                            <p className="text-sm font-medium text-gray-900">
+                                                {event.name}
+                                            </p>
+                                            <p className="text-sm font-normal text-gray-700">
+                                                {event.description}
+                                            </p>
+                                        </div>
                                     </div>
                                     <div className="ml-2 flex-shrink-0 flex">
                                         <p className="text-sm text-gray-500">{new Date(event.date).toLocaleDateString('en-GB', {
@@ -220,7 +252,63 @@ export const Calendar = () => {
                         ))}
                     </ul>
                 </div>
+                {showHistory && (
+                    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+                        <div className="bg-white rounded-lg shadow-lg w-full max-w-lg">
+                            <div className="flex justify-between items-center px-4 py-2 border-b">
+                                <h2 className="text-lg font-semibold">Past Event History</h2>
+                                <button onClick={() => setShowHistory(false)} className="text-gray-500 hover:text-gray-700">&times;</button>
+                            </div>
+                            <div className="p-4">
+                                {/* Search & Filter */}
+                                <div className="flex flex-col sm:flex-row gap-3 mb-4">
+                                    <input
+                                        type="text"
+                                        placeholder="Search by name..."
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        className="w-full sm:w-1/2 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                    />
+                                    <select
+                                        value={filterType}
+                                        onChange={(e) => setFilterType(e.target.value)}
+                                        className="w-full sm:w-1/2 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                    >
+                                        <option value="All">All Types</option>
+                                        <option value="Meeting">Meeting</option>
+                                        <option value="Field Trip">Field Trip</option>
+                                        <option value="Staff Event">Staff Event</option>
+                                        <option value="Special Celebration">Special Celebration</option>
+                                    </select>
+                                </div>
+
+                                {/* Event List */}
+                                <div className="max-h-90 overflow-y-auto">
+                                    {filteredPastEvents.length > 0 ? (
+                                        <ul className="divide-y divide-gray-200">
+                                            {filteredPastEvents.map(event => (
+                                                <li key={event._id} className="py-2">
+                                                    <div className="flex justify-between">
+                                                        <span className="font-medium">{event.name}</span>
+                                                        <span className="text-sm text-gray-500">
+                                                            {new Date(event.date).toLocaleDateString('en-GB')}
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-xs text-gray-500 capitalize">{event.type.replace("-", " ")}</p>
+                                                    <p className="text-sm text-gray-600">{event.description}</p>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    ) : (
+                                        <p className="text-gray-500">No events match your search/filter.</p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
+            {/* Event Types Info */}
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
                 <div className="bg-white shadow overflow-hidden rounded-lg">
                     <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
@@ -274,7 +362,7 @@ export const Calendar = () => {
                                     id="event-name"
                                     required
                                     onChange={(e) => setNewEvent({ ...newEvent, name: e.target.value })}
-                                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500 sm:text-sm"
+                                    className="p-1 mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500 sm:text-sm"
                                 />
                             </div>
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -290,7 +378,7 @@ export const Calendar = () => {
                                         name="event-date"
                                         id="event-date"
                                         onChange={(e) => setNewEvent({ ...newEvent, date: e.target.value })}
-                                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500 sm:text-sm"
+                                        className="p-1 mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500 sm:text-sm"
                                         required
                                     />
                                 </div>
@@ -305,7 +393,7 @@ export const Calendar = () => {
                                         id="event-type"
                                         name="event-type"
                                         onChange={(e) => setNewEvent({ ...newEvent, type: e.target.value })}
-                                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500 sm:text-sm"
+                                        className="p-1 mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500 sm:text-sm"
                                         required
                                     >
                                         <option>Meeting</option>
@@ -328,7 +416,7 @@ export const Calendar = () => {
                                     rows={3}
                                     onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })}
                                     required
-                                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500 sm:text-sm"
+                                    className="p-1 mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500 sm:text-sm"
                                 ></textarea>
                             </div>
                             <div>
